@@ -1,0 +1,739 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Bluetooth Guardian — Dashboard</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&family=Inter:wght@300;400;500;600&display=swap');
+
+  :root {
+    --bg:           #0a0e1a;
+    --surface:      #111827;
+    --surface2:     #1a2235;
+    --border:       #1e2d45;
+    --accent:       #3b82f6;
+    --accent-glow:  rgba(59,130,246,0.15);
+    --crit:         #ef4444;
+    --crit-glow:    rgba(239,68,68,0.15);
+    --warn:         #f59e0b;
+    --warn-glow:    rgba(245,158,11,0.12);
+    --ok:           #10b981;
+    --ok-glow:      rgba(16,185,129,0.15);
+    --text:         #e2e8f0;
+    --text-muted:   #64748b;
+    --text-dim:     #94a3b8;
+    --mono:         'JetBrains Mono', monospace;
+    --sans:         'Inter', sans-serif;
+  }
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--sans);
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* ── Header ── */
+  header {
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    padding: 0 2rem;
+    height: 56px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+  }
+
+  .header-left {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .bt-icon {
+    width: 28px;
+    height: 28px;
+    background: var(--accent);
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 14px;
+  }
+
+  header h1 {
+    font-family: var(--mono);
+    font-size: 14px;
+    font-weight: 600;
+    letter-spacing: 0.05em;
+    color: var(--text);
+  }
+
+  header h1 span {
+    color: var(--accent);
+  }
+
+  .header-right {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+  }
+
+  .pulse-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--ok);
+    box-shadow: 0 0 8px var(--ok);
+    animation: pulse 2s infinite;
+  }
+
+  .pulse-dot.offline { background: var(--crit); box-shadow: 0 0 8px var(--crit); animation: none; }
+  .pulse-dot.nodata  { background: var(--text-muted); box-shadow: none; animation: none; }
+
+  @keyframes pulse {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50%       { opacity: 0.5; transform: scale(0.85); }
+  }
+
+  #last-update {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--text-muted);
+  }
+
+  /* ── Layout ── */
+  main {
+    padding: 1.5rem 2rem;
+    max-width: 1400px;
+    margin: 0 auto;
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+  }
+
+  /* ── KPI row ── */
+  .kpi-row {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 1rem;
+  }
+
+  .kpi {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 1.25rem 1.5rem;
+    position: relative;
+    overflow: hidden;
+    transition: border-color 0.3s;
+  }
+
+  .kpi::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 2px;
+    background: var(--accent);
+    opacity: 0.6;
+  }
+
+  .kpi.crit::before  { background: var(--crit); }
+  .kpi.warn::before  { background: var(--warn); }
+  .kpi.ok::before    { background: var(--ok); }
+
+  .kpi-label {
+    font-size: 11px;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--text-muted);
+    margin-bottom: 8px;
+  }
+
+  .kpi-value {
+    font-family: var(--mono);
+    font-size: 32px;
+    font-weight: 700;
+    line-height: 1;
+    color: var(--text);
+  }
+
+  .kpi-value.crit { color: var(--crit); }
+  .kpi-value.ok   { color: var(--ok); }
+  .kpi-value.warn { color: var(--warn); }
+
+  .kpi-sub {
+    font-size: 11px;
+    color: var(--text-muted);
+    margin-top: 6px;
+    font-family: var(--mono);
+  }
+
+  /* ── System status banner ── */
+  #status-banner {
+    border-radius: 10px;
+    padding: 1rem 1.5rem;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    font-family: var(--mono);
+    font-size: 13px;
+    border: 1px solid;
+    transition: all 0.3s;
+  }
+
+  #status-banner.online  { background: var(--ok-glow);   border-color: var(--ok);   color: var(--ok); }
+  #status-banner.offline { background: var(--crit-glow); border-color: var(--crit); color: var(--crit); }
+  #status-banner.nodata  { background: var(--surface);   border-color: var(--border); color: var(--text-muted); }
+
+  /* ── Two column layout ── */
+  .two-col {
+    display: grid;
+    grid-template-columns: 1fr 380px;
+    gap: 1rem;
+  }
+
+  /* ── Panel ── */
+  .panel {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    overflow: hidden;
+  }
+
+  .panel-header {
+    padding: 1rem 1.5rem;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .panel-title {
+    font-family: var(--mono);
+    font-size: 12px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--text-dim);
+  }
+
+  .panel-badge {
+    font-family: var(--mono);
+    font-size: 11px;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 2px 8px;
+    color: var(--text-muted);
+  }
+
+  /* ── Device table ── */
+  .device-table {
+    width: 100%;
+    border-collapse: collapse;
+  }
+
+  .device-table th {
+    font-family: var(--mono);
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--text-muted);
+    padding: 10px 1.5rem;
+    text-align: left;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface2);
+  }
+
+  .device-table td {
+    padding: 12px 1.5rem;
+    font-size: 13px;
+    border-bottom: 1px solid var(--border);
+    vertical-align: middle;
+  }
+
+  .device-table tr:last-child td { border-bottom: none; }
+
+  .device-table tr:hover td { background: var(--surface2); }
+
+  .mac-addr {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--text-muted);
+  }
+
+  .device-name {
+    font-weight: 500;
+    color: var(--text);
+    margin-bottom: 2px;
+  }
+
+  .badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-family: var(--mono);
+    font-size: 10px;
+    font-weight: 600;
+    padding: 3px 8px;
+    border-radius: 4px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+
+  .badge.active   { background: var(--ok-glow);   color: var(--ok);   border: 1px solid var(--ok); }
+  .badge.inactive { background: var(--surface2);  color: var(--text-muted); border: 1px solid var(--border); }
+  .badge.alarm    { background: var(--crit-glow); color: var(--crit); border: 1px solid var(--crit);
+                    animation: blink 1s infinite; }
+
+  @keyframes blink {
+    0%, 100% { opacity: 1; }
+    50%       { opacity: 0.5; }
+  }
+
+  .stat-mini {
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--text-dim);
+  }
+
+  /* ── Event feed ── */
+  .event-feed {
+    padding: 0;
+    max-height: 420px;
+    overflow-y: auto;
+  }
+
+  .event-feed::-webkit-scrollbar { width: 4px; }
+  .event-feed::-webkit-scrollbar-track { background: transparent; }
+  .event-feed::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+  .event-item {
+    padding: 10px 1.5rem;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    transition: background 0.15s;
+  }
+
+  .event-item:hover { background: var(--surface2); }
+  .event-item:last-child { border-bottom: none; }
+
+  .event-top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .event-type {
+    font-family: var(--mono);
+    font-size: 11px;
+    font-weight: 600;
+  }
+
+  .sev-1 { color: var(--accent); }
+  .sev-2 { color: var(--warn); }
+  .sev-3 { color: var(--crit); }
+
+  .event-time {
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--text-muted);
+  }
+
+  .event-device {
+    font-size: 11px;
+    color: var(--text-muted);
+  }
+
+  /* ── Chart ── */
+  .chart-container {
+    padding: 1.5rem;
+    height: 220px;
+    position: relative;
+  }
+
+  /* ── Empty state ── */
+  .empty-state {
+    padding: 3rem 1.5rem;
+    text-align: center;
+    color: var(--text-muted);
+    font-family: var(--mono);
+    font-size: 12px;
+  }
+
+  .empty-icon { font-size: 32px; margin-bottom: 8px; opacity: 0.4; }
+
+  /* ── Responsive ── */
+  @media (max-width: 900px) {
+    .kpi-row  { grid-template-columns: repeat(2, 1fr); }
+    .two-col  { grid-template-columns: 1fr; }
+    main      { padding: 1rem; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="header-left">
+    <div class="bt-icon">🔵</div>
+    <h1>Bluetooth <span>Guardian</span></h1>
+  </div>
+  <div class="header-right">
+    <span id="last-update">Cargando...</span>
+    <div class="pulse-dot nodata" id="pulse"></div>
+  </div>
+</header>
+
+<main>
+
+  <!-- Status banner -->
+  <div id="status-banner" class="nodata">
+    <span id="status-icon">⬤</span>
+    <span id="status-text">Conectando con el sistema...</span>
+  </div>
+
+  <!-- KPIs -->
+  <div class="kpi-row">
+    <div class="kpi ok">
+      <div class="kpi-label">Dispositivos</div>
+      <div class="kpi-value" id="kpi-total">—</div>
+      <div class="kpi-sub">registrados</div>
+    </div>
+    <div class="kpi">
+      <div class="kpi-label">Monitoreados</div>
+      <div class="kpi-value accent" id="kpi-monitored">—</div>
+      <div class="kpi-sub">activos ahora</div>
+    </div>
+    <div class="kpi crit">
+      <div class="kpi-label">Alarmas activas</div>
+      <div class="kpi-value" id="kpi-alarms">—</div>
+      <div class="kpi-sub" id="kpi-alarms-sub">en curso</div>
+    </div>
+    <div class="kpi">
+      <div class="kpi-label">Último ping</div>
+      <div class="kpi-value" id="kpi-ping" style="font-size:20px;">—</div>
+      <div class="kpi-sub" id="kpi-ping-sub">segundos</div>
+    </div>
+  </div>
+
+  <!-- Devices + Events -->
+  <div class="two-col">
+
+    <!-- Devices table -->
+    <div class="panel">
+      <div class="panel-header">
+        <span class="panel-title">Dispositivos Bluetooth</span>
+        <span class="panel-badge" id="device-count">0 dispositivos</span>
+      </div>
+      <table class="device-table">
+        <thead>
+          <tr>
+            <th>Dispositivo</th>
+            <th>Estado</th>
+            <th>Alarmas</th>
+            <th>Última alarma</th>
+          </tr>
+        </thead>
+        <tbody id="device-tbody">
+          <tr><td colspan="4" class="empty-state">
+            <div class="empty-icon">📡</div>
+            Sin dispositivos registrados
+          </td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Event feed -->
+    <div class="panel">
+      <div class="panel-header">
+        <span class="panel-title">Eventos recientes</span>
+        <span class="panel-badge" id="event-count">0</span>
+      </div>
+      <div class="event-feed" id="event-feed">
+        <div class="empty-state">
+          <div class="empty-icon">📋</div>
+          Sin eventos registrados
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Chart -->
+  <div class="panel">
+    <div class="panel-header">
+      <span class="panel-title">Alarmas — últimos 7 días</span>
+    </div>
+    <div class="chart-container">
+      <canvas id="alarms-chart"></canvas>
+    </div>
+  </div>
+
+</main>
+
+<script>
+  const API = '';  // mismo origen — FastAPI sirve este HTML
+
+  let chart = null;
+  let eventsSeen = new Set();
+
+  // ── Inicializar gráfico ──────────────────────────────────
+  function initChart() {
+    const ctx = document.getElementById('alarms-chart').getContext('2d');
+    const labels = getLast7Days();
+    chart = new Chart(ctx, {
+      type: 'bar',
+      data: {
+        labels,
+        datasets: [{
+          label: 'Alarmas',
+          data: new Array(7).fill(0),
+          backgroundColor: 'rgba(59,130,246,0.25)',
+          borderColor: '#3b82f6',
+          borderWidth: 1.5,
+          borderRadius: 4,
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            backgroundColor: '#111827',
+            borderColor: '#1e2d45',
+            borderWidth: 1,
+            titleColor: '#94a3b8',
+            bodyColor: '#e2e8f0',
+            titleFont: { family: 'JetBrains Mono', size: 11 },
+            bodyFont:  { family: 'JetBrains Mono', size: 12 },
+          }
+        },
+        scales: {
+          x: {
+            grid:  { color: '#1e2d45' },
+            ticks: { color: '#64748b', font: { family: 'JetBrains Mono', size: 10 } }
+          },
+          y: {
+            beginAtZero: true,
+            grid:  { color: '#1e2d45' },
+            ticks: { color: '#64748b', font: { family: 'JetBrains Mono', size: 10 }, stepSize: 1 }
+          }
+        }
+      }
+    });
+  }
+
+  function getLast7Days() {
+    const days = [];
+    for (let i = 6; i >= 0; i--) {
+      const d = new Date();
+      d.setDate(d.getDate() - i);
+      days.push(d.toLocaleDateString('es-PE', { weekday: 'short', day: 'numeric' }));
+    }
+    return days;
+  }
+
+  // ── Actualizar gráfico con eventos ───────────────────────
+  function updateChart(events) {
+    if (!chart) return;
+    const counts = new Array(7).fill(0);
+    const today = new Date();
+
+    events
+      .filter(e => e.event_type === 'ALARM_TRIGGERED')
+      .forEach(e => {
+        const evDate = new Date(e.occurred_at);
+        const diffDays = Math.floor((today - evDate) / 86400000);
+        const idx = 6 - diffDays;
+        if (idx >= 0 && idx < 7) counts[idx]++;
+      });
+
+    chart.data.datasets[0].data = counts;
+
+    // Color rojo si hay alarmas críticas hoy
+    const hasAlarmToday = counts[6] > 0;
+    chart.data.datasets[0].backgroundColor = hasAlarmToday
+      ? 'rgba(239,68,68,0.2)'
+      : 'rgba(59,130,246,0.25)';
+    chart.data.datasets[0].borderColor = hasAlarmToday ? '#ef4444' : '#3b82f6';
+    chart.update('none');
+  }
+
+  // ── Render status banner ─────────────────────────────────
+  function renderStatus(systemStatus) {
+    const banner  = document.getElementById('status-banner');
+    const pulse   = document.getElementById('pulse');
+    const icon    = document.getElementById('status-icon');
+    const text    = document.getElementById('status-text');
+    const pingKpi = document.getElementById('kpi-ping');
+    const pingSub = document.getElementById('kpi-ping-sub');
+
+    banner.className = '';
+    pulse.className  = 'pulse-dot';
+
+    if (systemStatus.status === 'ONLINE') {
+      banner.classList.add('online');
+      pulse.classList.add('');
+      icon.textContent = '⬤';
+      text.textContent = `Sistema ONLINE — Servicio de monitoreo activo`;
+    } else if (systemStatus.status === 'OFFLINE') {
+      banner.classList.add('offline');
+      pulse.classList.add('offline');
+      icon.textContent = '⬤';
+      text.textContent = `Sistema OFFLINE — Sin señal del dispositivo Android`;
+    } else {
+      banner.classList.add('nodata');
+      pulse.classList.add('nodata');
+      icon.textContent = '○';
+      text.textContent = 'Sin datos — Esperando primer heartbeat del dispositivo';
+    }
+
+    if (systemStatus.seconds_since_ping !== null) {
+      pingKpi.textContent = systemStatus.seconds_since_ping + 's';
+      pingSub.textContent = 'desde último ping';
+    } else {
+      pingKpi.textContent = '—';
+      pingSub.textContent = 'sin datos';
+    }
+  }
+
+  // ── Render KPIs ──────────────────────────────────────────
+  function renderKPIs(data) {
+    document.getElementById('kpi-total').textContent     = data.total_devices;
+    document.getElementById('kpi-monitored').textContent = data.monitored_devices;
+
+    const alarmEl  = document.getElementById('kpi-alarms');
+    const alarmSub = document.getElementById('kpi-alarms-sub');
+    alarmEl.textContent  = data.active_alarms_count;
+    alarmEl.className    = 'kpi-value' + (data.active_alarms_count > 0 ? ' crit' : ' ok');
+    alarmSub.textContent = data.active_alarms_count > 0 ? '⚠ ALARMA ACTIVA' : 'sin alarmas';
+  }
+
+  // ── Render tabla de dispositivos ─────────────────────────
+  function renderDevices(devices) {
+    const tbody = document.getElementById('device-tbody');
+    const count = document.getElementById('device-count');
+    count.textContent = `${devices.length} dispositivo${devices.length !== 1 ? 's' : ''}`;
+
+    if (devices.length === 0) {
+      tbody.innerHTML = `<tr><td colspan="4" class="empty-state">
+        <div class="empty-icon">📡</div>Sin dispositivos registrados</td></tr>`;
+      return;
+    }
+
+    tbody.innerHTML = devices.map(d => {
+      const statusBadge = d.alarm_active
+        ? `<span class="badge alarm">🚨 Alarma</span>`
+        : d.is_monitored
+          ? `<span class="badge active">● Monitoreado</span>`
+          : `<span class="badge inactive">○ Inactivo</span>`;
+
+      const lastAlarm = d.last_alarm_at
+        ? formatTime(d.last_alarm_at)
+        : '<span style="color:var(--text-muted)">Nunca</span>';
+
+      return `<tr>
+        <td>
+          <div class="device-name">${d.device_name}</div>
+          <div class="mac-addr">${d.mac_address}</div>
+        </td>
+        <td>${statusBadge}</td>
+        <td>
+          <span class="stat-mini">${d.total_alarms} total</span>
+        </td>
+        <td><span class="stat-mini">${lastAlarm}</span></td>
+      </tr>`;
+    }).join('');
+  }
+
+  // ── Render feed de eventos ───────────────────────────────
+  function renderEvents(events) {
+    const feed  = document.getElementById('event-feed');
+    const count = document.getElementById('event-count');
+    count.textContent = events.length;
+
+    if (events.length === 0) {
+      feed.innerHTML = `<div class="empty-state">
+        <div class="empty-icon">📋</div>Sin eventos registrados</div>`;
+      return;
+    }
+
+    // Detectar eventos nuevos para highlight
+    const newIds = new Set(events.map(e => e.id));
+
+    feed.innerHTML = events.map(e => {
+      const isNew  = !eventsSeen.has(e.id);
+      const sevCls = `sev-${e.severity}`;
+      const device = e.device_name
+        ? `<div class="event-device">${e.device_name} · ${e.mac_address || ''}</div>`
+        : '';
+
+      return `<div class="event-item" style="${isNew ? 'background:var(--surface2)' : ''}">
+        <div class="event-top">
+          <span class="event-type ${sevCls}">${e.event_type}</span>
+          <span class="event-time">${formatTime(e.occurred_at)}</span>
+        </div>
+        ${device}
+      </div>`;
+    }).join('');
+
+    eventsSeen = newIds;
+  }
+
+  // ── Helpers ──────────────────────────────────────────────
+  function formatTime(iso) {
+    if (!iso) return '—';
+    const d = new Date(iso);
+    return d.toLocaleString('es-PE', {
+      month: '2-digit', day: '2-digit',
+      hour: '2-digit',  minute: '2-digit', second: '2-digit'
+    });
+  }
+
+  function setLastUpdate() {
+    const now = new Date();
+    document.getElementById('last-update').textContent =
+      'Actualizado ' + now.toLocaleTimeString('es-PE');
+  }
+
+  // ── Fetch principal ──────────────────────────────────────
+  async function fetchDashboard() {
+    try {
+      const res  = await fetch(`${API}/dashboard/summary`);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+
+      renderStatus(data.system_status);
+      renderKPIs(data);
+      renderDevices(data.devices);
+      renderEvents(data.recent_events);
+      updateChart(data.recent_events);
+      setLastUpdate();
+
+    } catch (err) {
+      console.error('Error fetching dashboard:', err);
+      document.getElementById('status-text').textContent =
+        'Error de conexión con el API — reintentando...';
+    }
+  }
+
+  // ── Init ─────────────────────────────────────────────────
+  initChart();
+  fetchDashboard();
+  setInterval(fetchDashboard, 5000);   // polling cada 5 segundos
+</script>
+</body>
+</html>
