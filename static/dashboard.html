@@ -574,40 +574,42 @@
 
   // ── Render status banner ─────────────────────────────────
   function renderStatus(systemStatus) {
-    const banner  = document.getElementById('status-banner');
-    const pulse   = document.getElementById('pulse');
-    const icon    = document.getElementById('status-icon');
-    const text    = document.getElementById('status-text');
-    const pingKpi = document.getElementById('kpi-ping');
-    const pingSub = document.getElementById('kpi-ping-sub');
+      const banner  = document.getElementById('status-banner');
+      const pulse   = document.getElementById('pulse');
+      const icon    = document.getElementById('status-icon');
+      const text    = document.getElementById('status-text');
+      const pingKpi = document.getElementById('kpi-ping');
+      const pingSub = document.getElementById('kpi-ping-sub');
 
-    banner.className = '';
-    pulse.className  = 'pulse-dot';
+      // Limpiar clases previas
+      banner.className  = '';
+      pulse.className   = 'pulse-dot';
 
-    if (systemStatus.status === 'ONLINE') {
-      banner.classList.add('online');
-      pulse.classList.add('');
-      icon.textContent = '⬤';
-      text.textContent = `Sistema ONLINE — Servicio de monitoreo activo`;
-    } else if (systemStatus.status === 'OFFLINE') {
-      banner.classList.add('offline');
-      pulse.classList.add('offline');
-      icon.textContent = '⬤';
-      text.textContent = `Sistema OFFLINE — Sin señal del dispositivo Android`;
-    } else {
-      banner.classList.add('nodata');
-      pulse.classList.add('nodata');
-      icon.textContent = '○';
-      text.textContent = 'Sin datos — Esperando primer heartbeat del dispositivo';
-    }
+      const status = systemStatus?.status || 'NO_DATA';
 
-    if (systemStatus.seconds_since_ping !== null) {
-      pingKpi.textContent = systemStatus.seconds_since_ping + 's';
-      pingSub.textContent = 'desde último ping';
-    } else {
-      pingKpi.textContent = '—';
-      pingSub.textContent = 'sin datos';
-    }
+      if (status === 'ONLINE') {
+          banner.classList.add('online');
+          icon.textContent = '⬤';
+          text.textContent = 'Sistema ONLINE — Servicio de monitoreo activo';
+      } else if (status === 'OFFLINE') {
+          banner.classList.add('offline');
+          pulse.classList.add('offline');
+          icon.textContent = '⬤';
+          text.textContent = 'Sistema OFFLINE — Sin señal del dispositivo Android';
+      } else {
+          banner.classList.add('nodata');
+          pulse.classList.add('nodata');
+          icon.textContent = '○';
+          text.textContent = 'Sin datos — Esperando primer heartbeat del dispositivo';
+      }
+
+      if (systemStatus?.seconds_since_ping !== null && systemStatus?.seconds_since_ping !== undefined) {
+          pingKpi.textContent = systemStatus.seconds_since_ping + 's';
+          pingSub.textContent = 'desde último ping';
+      } else {
+          pingKpi.textContent = '—';
+          pingSub.textContent = 'sin datos';
+      }
   }
 
   // ── Render KPIs ──────────────────────────────────────────
