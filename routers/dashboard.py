@@ -15,7 +15,7 @@ from models.event import BTEvent
 router = APIRouter(prefix="/dashboard", tags=["Dashboard"])
 
 STATIC_DIR = Path(__file__).parent.parent / "static"
-cre
+
 
 @router.get("/ui", include_in_schema=False)
 def serve_dashboard():
